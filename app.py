@@ -33,7 +33,7 @@ def load_data():
     ws_rekap = sh.worksheet("Lembar2")
     data = ws_rekap.get_all_values()
     
-    rows = data[5:]  # Baris data mulai row 6 (index 5)
+    rows = data[5:]  # Row 6 ke bawah
     
     parsed_data = []
     for r in rows:
@@ -43,6 +43,7 @@ def load_data():
             nama = r[2]
             lp = r[3] if len(r) > 3 else ""
             kelas = r[4] if len(r) > 4 else ""
+            # Kolom G (index 6) = Jajan | Kolom I (index 8) = Uang Masuk | Kolom K (index 10) = Uang Keluar | Kolom M (index 12) = Saldo
             jatah = r[6] if len(r) > 6 else "0"
             masuk = r[8] if len(r) > 8 else "0"
             keluar = r[10] if len(r) > 10 else "0"
@@ -61,11 +62,10 @@ def load_data():
     return df
 
 def tambah_santri_baru(nama, lp, kelas, jatah_jajan):
-    """Mengisi baris template kosong pertama di Lembar2 dari Kolom B s/d M"""
+    """Mengisi baris template kosong di Lembar2 dengan koordinat presisi B s/d M"""
     ws_rekap = sh.worksheet("Lembar2")
     all_vals = ws_rekap.get_all_values()
     
-    # Cari baris template pertama yang kolom Namanya (Kolom C) masih kosong
     target_row = None
     existing_count = 0
     
@@ -75,14 +75,19 @@ def tambah_santri_baru(nama, lp, kelas, jatah_jajan):
         if nama_cell != "":
             existing_count += 1
         elif target_row is None:
-            target_row = i + 1  # Row index 1-based di Sheets
+            target_row = i + 1
             
     if target_row is None:
         target_row = len(all_vals) + 1
         
     no_baru = existing_count + 1
     
-    # Update sel B{row} sampai M{row} secara presisi
+    # STRUKTUR KORMAT PRESISI:
+    # Col B: No (1) | Col C: Nama (2) | Col D: L/P (3) | Col E: Kelas (4)
+    # Col F: Rp (5) | Col G: Nominal Jajan (6)
+    # Col H: Rp (7) | Col I: Uang Masuk 0 (8)
+    # Col J: Rp (9) | Col K: Uang Keluar 0 (10)
+    # Col L: Rp (11)| Col M: Sisa Saldo 0 (12)
     data_row = [no_baru, nama.upper(), lp, kelas, "Rp", jatah_jajan, "Rp", 0, "Rp", 0, "Rp", 0]
     ws_rekap.update(f"B{target_row}:M{target_row}", [data_row])
     
@@ -104,6 +109,7 @@ def catat_transaksi(no_santri, jenis, nominal, tanggal, keterangan):
     cell = ws_rekap.find(str(no_santri), in_column=2)
     row_idx = cell.row
     
+    # Col I (idx 9) = Masuk | Col K (idx 11) = Keluar
     val_masuk = float(str(ws_rekap.cell(row_idx, 9).value or 0).replace('.', '').replace(',', ''))
     val_keluar = float(str(ws_rekap.cell(row_idx, 11).value or 0).replace('.', '').replace(',', ''))
     
@@ -116,6 +122,7 @@ def catat_transaksi(no_santri, jenis, nominal, tanggal, keterangan):
         
     current_masuk = float(str(ws_rekap.cell(row_idx, 9).value or 0).replace('.', '').replace(',', ''))
     current_keluar = float(str(ws_rekap.cell(row_idx, 11).value or 0).replace('.', '').replace(',', ''))
+    # Col M (idx 13) = Saldo
     ws_rekap.update_cell(row_idx, 13, current_masuk - current_keluar)
 
     try:
@@ -135,7 +142,6 @@ def catat_transaksi(no_santri, jenis, nominal, tanggal, keterangan):
     return True
 
 def hapus_santri(nama_target):
-    """Menghapus data santri dari Lembar2 & menghapus Sheet riwayatnya"""
     ws_rekap = sh.worksheet("Lembar2")
     cell = ws_rekap.find(nama_target, in_column=3)
     
@@ -147,7 +153,6 @@ def hapus_santri(nama_target):
         empty_row = ["", "", "", "", "", "", "", "", "", "", "", ""]
         ws_rekap.update(f"B{row_idx}:M{row_idx}", [empty_row])
         
-        # Hapus Sheet Riwayat Individual jika ada
         try:
             ws_santri = sh.worksheet(str(no_santri))
             sh.del_worksheet(ws_santri)
@@ -159,6 +164,11 @@ def hapus_santri(nama_target):
 # --- HEADER APP ---
 st.title("💰 System Keuangan Jajan Santri")
 st.caption("Pondok Pesantren Miftahul Huda IV - Cloud Access")
+
+# TAMPILKAN POPUP / FLASHER PESAN SUKSE/INFO
+if "msg_success" in st.session_state:
+    st.success(st.session_state.msg_success)
+    del st.session_state.msg_success
 
 df_santri = load_data()
 
@@ -207,7 +217,7 @@ if not df_santri.empty:
             if submitted:
                 no_santri = df_santri[df_santri['Nama Santri'] == nama_santri]['No'].values[0]
                 if catat_transaksi(no_santri, jenis_trx, nominal, tgl, keterangan):
-                    st.success(f"Berhasil menyimpan data untuk **{nama_santri}**!")
+                    st.session_state.msg_success = f"✅ Transaksi **{nama_santri}** berhasil disimpan!"
                     st.rerun()
 
     # -------------------------------------------------------------
@@ -229,7 +239,7 @@ if not df_santri.empty:
             if btn_tambah:
                 if nama_baru.strip() != "":
                     tambah_santri_baru(nama_baru, lp_baru, kelas_baru, jatah_baru)
-                    st.success(f"Santri **{nama_baru}** berhasil ditambahkan!")
+                    st.session_state.msg_success = f"🎉 Data santri **{nama_baru.upper()}** berhasil ditambahkan!"
                     st.rerun()
                 else:
                     st.warning("Nama santri tidak boleh kosong!")
@@ -256,7 +266,7 @@ if not df_santri.empty:
         
         if st.button("🗑️ Hapus Santri Ini", type="primary"):
             if hapus_santri(target_hapus):
-                st.success(f"Data santri **{target_hapus}** berhasil dihapus!")
+                st.session_state.msg_success = f"🗑️ Data santri **{target_hapus}** berhasil dihapus!"
                 st.rerun()
             else:
                 st.error("Gagal menghapus data santri.")
