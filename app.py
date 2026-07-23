@@ -25,12 +25,8 @@ def init_connection():
     )
     return gspread.authorize(credentials)
 
-try:
-    gc = init_connection()
-    sh = gc.open("ADM JAJAN SANTRI")
-except Exception as e:
-    st.error(f"⚠️ Detail Error: {e}")
-    st.stop()
+gc = init_connection()
+sh = gc.open("ADM JAJAN SANTRI")
 
 # --- HELPER FUNCTIONS ---
 def load_data():
