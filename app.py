@@ -26,7 +26,7 @@ def init_connection():
     return gspread.authorize(credentials)
 
 gc = init_connection()
-sh = gc.open("ADM JAJAN SANTRI")
+sh = gc.open_by_key("1RAIbKcuC1z1X_IYYS0yZzjdUp-qKL6uiEpO34INsW9g")
 
 # --- HELPER FUNCTIONS ---
 def load_data():
