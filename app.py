@@ -29,7 +29,7 @@ try:
     gc = init_connection()
     sh = gc.open("ADM JAJAN SANTRI")
 except Exception as e:
-    st.error("Belum terhubung ke Google Sheets Secrets Streamlit. Harap atur Secrets terlebih dahulu.")
+    st.error(f"⚠️ Detail Error: {e}")
     st.stop()
 
 # --- HELPER FUNCTIONS ---
