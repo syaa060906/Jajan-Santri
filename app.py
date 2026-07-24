@@ -43,11 +43,13 @@ def load_data():
             nama = r[2]
             lp = r[3] if len(r) > 3 else ""
             kelas = r[4] if len(r) > 4 else ""
-            # Kolom G (index 6) = Jajan | Kolom I (index 8) = Uang Masuk | Kolom K (index 10) = Uang Keluar | Kolom M (index 12) = Saldo
-            jatah = r[6] if len(r) > 6 else "0"
-            masuk = r[8] if len(r) > 8 else "0"
-            keluar = r[10] if len(r) > 10 else "0"
-            saldo = r[12] if len(r) > 12 else "0"
+            
+            # FIT SESUAI STRUKTUR BARU LO:
+            # Col F (idx 5) = Jajan | Col G (idx 6) = Uang Masuk | Col H (idx 7) = Uang Keluar | Col I (idx 8) = Saldo
+            jatah = r[5] if len(r) > 5 else "0"
+            masuk = r[6] if len(r) > 6 else "0"
+            keluar = r[7] if len(r) > 7 else "0"
+            saldo = r[8] if len(r) > 8 else "0"
             
             parsed_data.append([no, nama, lp, kelas, jatah, masuk, keluar, saldo])
             
@@ -62,7 +64,7 @@ def load_data():
     return df
 
 def tambah_santri_baru(nama, lp, kelas, jatah_jajan):
-    """Mengisi baris template kosong di Lembar2 dengan koordinat presisi B s/d M"""
+    """Mengisi baris template kosong di Lembar2 dengan koordinat presisi B s/d I"""
     ws_rekap = sh.worksheet("Lembar2")
     all_vals = ws_rekap.get_all_values()
     
@@ -82,14 +84,10 @@ def tambah_santri_baru(nama, lp, kelas, jatah_jajan):
         
     no_baru = existing_count + 1
     
-    # STRUKTUR KORMAT PRESISI:
-    # Col B: No (1) | Col C: Nama (2) | Col D: L/P (3) | Col E: Kelas (4)
-    # Col F: Rp (5) | Col G: Nominal Jajan (6)
-    # Col H: Rp (7) | Col I: Uang Masuk 0 (8)
-    # Col J: Rp (9) | Col K: Uang Keluar 0 (10)
-    # Col L: Rp (11)| Col M: Sisa Saldo 0 (12)
-    data_row = [no_baru, nama.upper(), lp, kelas, "Rp", jatah_jajan, "Rp", 0, "Rp", 0, "Rp", 0]
-    ws_rekap.update(f"B{target_row}:M{target_row}", [data_row])
+    # STRUKTUR KORMAT PRESISI B S/D I:
+    # Col B: No | Col C: Nama | Col D: L/P | Col E: Kelas | Col F: Jajan | Col G: Uang Masuk | Col H: Uang Keluar | Col I: Sisa Saldo
+    data_row = [no_baru, nama.upper(), lp, kelas, jatah_jajan, 0, 0, 0]
+    ws_rekap.update(f"B{target_row}:I{target_row}", [data_row])
     
     # Buat Sheet Baru Khusus Santri Tersebut
     try:
@@ -109,21 +107,21 @@ def catat_transaksi(no_santri, jenis, nominal, tanggal, keterangan):
     cell = ws_rekap.find(str(no_santri), in_column=2)
     row_idx = cell.row
     
-    # Col I (idx 9) = Masuk | Col K (idx 11) = Keluar
-    val_masuk = float(str(ws_rekap.cell(row_idx, 9).value or 0).replace('.', '').replace(',', ''))
-    val_keluar = float(str(ws_rekap.cell(row_idx, 11).value or 0).replace('.', '').replace(',', ''))
+    # Col G (idx 7 di cell sheet) = Masuk | Col H (idx 8 di cell sheet) = Keluar
+    val_masuk = float(str(ws_rekap.cell(row_idx, 7).value or 0).replace('.', '').replace(',', ''))
+    val_keluar = float(str(ws_rekap.cell(row_idx, 8).value or 0).replace('.', '').replace(',', ''))
     
     if "Masuk" in jenis:
         new_masuk = val_masuk + nominal
-        ws_rekap.update_cell(row_idx, 9, new_masuk)
+        ws_rekap.update_cell(row_idx, 7, new_masuk)
     else:
         new_keluar = val_keluar + nominal
-        ws_rekap.update_cell(row_idx, 11, new_keluar)
+        ws_rekap.update_cell(row_idx, 8, new_keluar)
         
-    current_masuk = float(str(ws_rekap.cell(row_idx, 9).value or 0).replace('.', '').replace(',', ''))
-    current_keluar = float(str(ws_rekap.cell(row_idx, 11).value or 0).replace('.', '').replace(',', ''))
-    # Col M (idx 13) = Saldo
-    ws_rekap.update_cell(row_idx, 13, current_masuk - current_keluar)
+    current_masuk = float(str(ws_rekap.cell(row_idx, 7).value or 0).replace('.', '').replace(',', ''))
+    current_keluar = float(str(ws_rekap.cell(row_idx, 8).value or 0).replace('.', '').replace(',', ''))
+    # Col I (idx 9 di cell sheet) = Saldo
+    ws_rekap.update_cell(row_idx, 9, current_masuk - current_keluar)
 
     try:
         ws_santri = sh.worksheet(str(no_santri))
@@ -149,9 +147,9 @@ def hapus_santri(nama_target):
         row_idx = cell.row
         no_santri = ws_rekap.cell(row_idx, 2).value
         
-        # Kosongkan baris B s/d M di Lembar2
-        empty_row = ["", "", "", "", "", "", "", "", "", "", "", ""]
-        ws_rekap.update(f"B{row_idx}:M{row_idx}", [empty_row])
+        # Kosongkan baris B s/d I di Lembar2
+        empty_row = ["", "", "", "", "", "", "", ""]
+        ws_rekap.update(f"B{row_idx}:I{row_idx}", [empty_row])
         
         try:
             ws_santri = sh.worksheet(str(no_santri))
@@ -165,7 +163,7 @@ def hapus_santri(nama_target):
 st.title("💰 System Keuangan Jajan Santri")
 st.caption("Pondok Pesantren Miftahul Huda IV - Cloud Access")
 
-# TAMPILKAN POPUP / FLASHER PESAN SUKSE/INFO
+# TAMPILKAN POPUP NOTIFIKASI
 if "msg_success" in st.session_state:
     st.success(st.session_state.msg_success)
     del st.session_state.msg_success
