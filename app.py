@@ -29,49 +29,50 @@ def init_connection():
 gc = init_connection()
 sh = gc.open_by_key("1RAIbKcuC1z1X_IYYS0yZzjdUp-qKL6uiEpO34INsW9g")
 
-# --- HELPER CLEANER ANGKA (KEBAL ERROR) ---
+# --- HELPER CLEANER ANGKA ---
 def clean_number(value):
-    """Membersihkan segala jenis karakter bukan angka (Rp, spasi, titik, koma)"""
     if not value:
         return 0.0
     val_str = str(value)
     cleaned = re.sub(r'[^\d]', '', val_str)
     return float(cleaned) if cleaned else 0.0
 
-# --- HELPER FUNCTIONS ---
+# --- LOAD DATA REKAP ---
 def load_data():
     ws_rekap = sh.worksheet("Lembar2")
     data = ws_rekap.get_all_values()
     
-    rows = data[5:]  # Row 6 ke bawah
+    # Ambil dari baris 6 ke bawah
+    rows = data[5:]
     
     parsed_data = []
     for r in rows:
+        # Col B (idx 1) = No, Col C (idx 2) = Nama
         if len(r) > 2 and r[2].strip() != "":
             no = r[1] if len(r) > 1 else ""
             nama = r[2]
             lp = r[3] if len(r) > 3 else ""
             kelas = r[4] if len(r) > 4 else ""
             
-            jatah = clean_number(r[5]) if len(r) > 5 else 0.0
+            # Pas dengan kolom F, G, H, I (idx 5, 6, 7, 8)
+            jajan = clean_number(r[5]) if len(r) > 5 else 0.0
             masuk = clean_number(r[6]) if len(r) > 6 else 0.0
             keluar = clean_number(r[7]) if len(r) > 7 else 0.0
             saldo = clean_number(r[8]) if len(r) > 8 else 0.0
             
-            parsed_data.append([no, nama, lp, kelas, jatah, masuk, keluar, saldo])
+            parsed_data.append([no, nama, lp, kelas, jajan, masuk, keluar, saldo])
             
     df = pd.DataFrame(parsed_data, columns=['No', 'Nama Santri', 'L/P', 'Kelas', 'Jatah Jajan', 'Uang Masuk', 'Uang Keluar', 'Sisa Saldo'])
     return df
 
+# --- RIWAYAT PER SANTRI ---
 def get_riwayat_santri(no_santri):
-    """Membaca sheet individual santri berdasarkan nomor urutnya"""
     try:
         ws_santri = sh.worksheet(str(no_santri))
         data = ws_santri.get_all_values()
         
-        # Ambil transaksi mulai dari baris ke-8 (setelah header sheet santri)
         if len(data) >= 7:
-            rows = data[6:] # Header di baris 7, data di bawahnya
+            rows = data[6:]
             parsed_trx = []
             for r in rows:
                 if len(r) > 3 and (r[3].strip() != "" or r[2].strip() != ""):
@@ -84,12 +85,12 @@ def get_riwayat_santri(no_santri):
                     
                     parsed_trx.append([no_trx, tgl, ket, masuk, keluar, saldo])
             
-            df_trx = pd.DataFrame(parsed_trx, columns=['No. Trx', 'Tanggal', 'Keterangan', 'Uang Masuk', 'Uang Keluar', 'Saldo Sisa'])
-            return df_trx
-    except Exception as e:
+            return pd.DataFrame(parsed_trx, columns=['No. Trx', 'Tanggal', 'Keterangan', 'Uang Masuk', 'Uang Keluar', 'Saldo Sisa'])
+    except Exception:
         pass
     return pd.DataFrame()
 
+# --- TAMBAH SANTRI BARU ---
 def tambah_santri_baru(nama, lp, kelas, jatah_jajan):
     ws_rekap = sh.worksheet("Lembar2")
     all_vals = ws_rekap.get_all_values()
@@ -110,9 +111,12 @@ def tambah_santri_baru(nama, lp, kelas, jatah_jajan):
         
     no_baru = existing_count + 1
     
-    data_row = [no_baru, nama.upper(), lp, kelas, jatah_jajan, 0, 0, 0]
+    # TEPAT PAS 8 KOLOM (Col B sampai Col I):
+    # [No, Nama, L/P, Kelas, Jajan, Uang Masuk, Uang Keluar, Sisa Saldo]
+    data_row = [int(no_baru), nama.upper(), lp, kelas, int(jatah_jajan), 0, 0, 0]
     ws_rekap.update(f"B{target_row}:I{target_row}", [data_row])
     
+    # Buat Sheet Individual untuk Santri Baru
     try:
         ws_new = sh.add_worksheet(title=str(no_baru), rows="100", cols="10")
         ws_new.append_row(["", "REKAP UANG JAJAN SANTRI"])
@@ -122,45 +126,55 @@ def tambah_santri_baru(nama, lp, kelas, jatah_jajan):
         ws_new.append_row(["", "Kelas", "", kelas])
         ws_new.append_row(["", "Jatah perhari", "", jatah_jajan])
         ws_new.append_row(["", "No.", "Tanggal", "Keterangan", "Uang Masuk", "Uang Keluar", "Saldo"])
-    except:
+    except Exception:
         pass
 
+# --- CATAT TRANSAKSI ---
 def catat_transaksi(no_santri, jenis, nominal, tanggal, keterangan):
     ws_rekap = sh.worksheet("Lembar2")
+    
+    # Cari baris santri berdasarkan No di Kolom B
     cell = ws_rekap.find(str(no_santri), in_column=2)
+    if not cell:
+        return False
+        
     row_idx = cell.row
     
+    # Col G (7) = Uang Masuk | Col H (8) = Uang Keluar | Col I (9) = Sisa Saldo
     val_masuk = clean_number(ws_rekap.cell(row_idx, 7).value)
     val_keluar = clean_number(ws_rekap.cell(row_idx, 8).value)
     
     if "Masuk" in jenis:
         new_masuk = val_masuk + nominal
-        ws_rekap.update_cell(row_idx, 7, new_masuk)
+        ws_rekap.update_cell(row_idx, 7, int(new_masuk))
     else:
         new_keluar = val_keluar + nominal
-        ws_rekap.update_cell(row_idx, 8, new_keluar)
+        ws_rekap.update_cell(row_idx, 8, int(new_keluar))
         
     current_masuk = clean_number(ws_rekap.cell(row_idx, 7).value)
     current_keluar = clean_number(ws_rekap.cell(row_idx, 8).value)
     
-    ws_rekap.update_cell(row_idx, 9, current_masuk - current_keluar)
+    # Update Sisa Saldo di Col I
+    ws_rekap.update_cell(row_idx, 9, int(current_masuk - current_keluar))
 
+    # Catat di Sheet Santri Individual
     try:
         ws_santri = sh.worksheet(str(no_santri))
         next_row = len(ws_santri.get_all_values()) + 1
         no_trx = next_row - 6
         
-        uang_masuk = nominal if "Masuk" in jenis else ""
-        uang_keluar = nominal if "Keluar" in jenis else ""
-        saldo_baru = current_masuk - current_keluar
+        uang_masuk = int(nominal) if "Masuk" in jenis else ""
+        uang_keluar = int(nominal) if "Keluar" in jenis else ""
+        saldo_baru = int(current_masuk - current_keluar)
         
         ws_santri.append_row([
             "", no_trx, str(tanggal), keterangan, uang_masuk, uang_keluar, saldo_baru
         ])
-    except:
+    except Exception:
         pass
     return True
 
+# --- HAPUS SANTRI ---
 def hapus_santri(nama_target):
     ws_rekap = sh.worksheet("Lembar2")
     cell = ws_rekap.find(nama_target, in_column=3)
@@ -175,12 +189,12 @@ def hapus_santri(nama_target):
         try:
             ws_santri = sh.worksheet(str(no_santri))
             sh.del_worksheet(ws_santri)
-        except:
+        except Exception:
             pass
         return True
     return False
 
-# --- HEADER APP ---
+# --- UI STREAMLIT ---
 st.title("💰 System Keuangan Jajan Santri")
 st.caption("Pondok Pesantren Miftahul Huda IV - Cloud Access")
 
@@ -191,7 +205,6 @@ if "msg_success" in st.session_state:
 df_santri = load_data()
 
 if not df_santri.empty:
-    # --- DASHBOARD SUMMARY ---
     st.subheader("📊 Summary Keuangan Total")
     col1, col2, col3 = st.columns(3)
     
@@ -205,7 +218,6 @@ if not df_santri.empty:
     
     st.divider()
 
-    # --- SIDEBAR MENU ---
     st.sidebar.header("📌 Menu Navigasi")
     menu = st.sidebar.radio("Pilih Halaman:", [
         "Input Transaksi Cepat", 
@@ -215,9 +227,6 @@ if not df_santri.empty:
         "❌ Hapus Data Santri"
     ])
 
-    # -------------------------------------------------------------
-    # MENU 1: INPUT TRANSAKSI
-    # -------------------------------------------------------------
     if menu == "Input Transaksi Cepat":
         st.subheader("📝 Catat Transaksi Baru")
         with st.form("form_transaksi", clear_on_submit=True):
@@ -239,19 +248,13 @@ if not df_santri.empty:
                     st.session_state.msg_success = f"✅ Transaksi **{nama_santri}** berhasil disimpan!"
                     st.rerun()
 
-    # -------------------------------------------------------------
-    # MENU 2: RIWAYAT & MUTASI SANTRI (BARU 🔥)
-    # -------------------------------------------------------------
     elif menu == "📜 Riwayat & Mutasi Santri":
         st.subheader("📜 Detail Riwayat Transaksi Santri")
+        target_nama = st.selectbox("Pilih Nama Santri:", df_santri['Nama Santri'].unique())
         
-        target_nama = st.selectbox("Pilih Nama Santri untuk Dilihat Riwayatnya:", df_santri['Nama Santri'].unique())
-        
-        # Ambil data santri terpilih
         info_santri = df_santri[df_santri['Nama Santri'] == target_nama].iloc[0]
         no_santri = info_santri['No']
         
-        # Tampilkan kartu info ringkas santri
         c_i1, c_i2, c_i3, c_i4 = st.columns(4)
         c_i1.info(f"**Kelas:** {info_santri['Kelas']}")
         c_i2.info(f"**Jatah/Hari:** Rp {info_santri['Jatah Jajan']:,.0f}".replace(",", "."))
@@ -262,41 +265,30 @@ if not df_santri.empty:
         df_riwayat = get_riwayat_santri(no_santri)
         
         if not df_riwayat.empty:
-            # Format tampilan tabel angka
             df_display = df_riwayat.copy()
             df_display['Uang Masuk'] = df_display['Uang Masuk'].apply(lambda x: f"Rp {x:,.0f}".replace(",", ".") if x > 0 else "-")
             df_display['Uang Keluar'] = df_display['Uang Keluar'].apply(lambda x: f"Rp {x:,.0f}".replace(",", ".") if x > 0 else "-")
             df_display['Saldo Sisa'] = df_display['Saldo Sisa'].apply(lambda x: f"Rp {x:,.0f}".replace(",", "."))
-            
             st.dataframe(df_display, use_container_width=True, hide_index=True)
         else:
-            st.warning("Belum ada riwayat transaksi yang tercatat untuk santri ini.")
+            st.warning("Belum ada riwayat transaksi yang tercatat.")
 
-    # -------------------------------------------------------------
-    # MENU 3: REKAPITULASI SALDO
-    # -------------------------------------------------------------
     elif menu == "📋 Rekapitulasi Saldo":
         st.subheader("📋 Rekapitulasi Seluruh Santri")
-        
-        # Formatting data frame biar cantik dengan Rp
         df_show = df_santri.copy()
         for c in ['Jatah Jajan', 'Uang Masuk', 'Uang Keluar', 'Sisa Saldo']:
             df_show[c] = df_show[c].apply(lambda x: f"Rp {x:,.0f}".replace(",", "."))
-            
         st.dataframe(df_show, use_container_width=True, hide_index=True)
 
-    # -------------------------------------------------------------
-    # MENU 4: TAMBAH SANTRI BARU
-    # -------------------------------------------------------------
     elif menu == "➕ Tambah Santri Baru":
-        st.subheader("➕ Tambah Santri Baru ke System")
+        st.subheader("➕ Tambah Santri Baru")
         with st.form("form_tambah_santri", clear_on_submit=True):
             nama_baru = st.text_input("Nama Lengkap Santri:")
             c_lp, c_kelas = st.columns(2)
             with c_lp:
                 lp_baru = st.selectbox("Jenis Kelamin (L/P):", ["L", "P"])
             with c_kelas:
-                kelas_baru = st.text_input("Kelas (misal: 7 SMP, 10 SMK):", value="7 SMP")
+                kelas_baru = st.text_input("Kelas:", value="7 SMP")
                 
             jatah_baru = st.number_input("Jatah Jajan Perhari (Rp):", min_value=0, step=5000, value=20000)
             
@@ -309,13 +301,8 @@ if not df_santri.empty:
                 else:
                     st.warning("Nama santri tidak boleh kosong!")
 
-    # -------------------------------------------------------------
-    # MENU 5: HAPUS DATA SANTRI
-    # -------------------------------------------------------------
     elif menu == "❌ Hapus Data Santri":
-        st.subheader("❌ Hapus Data Santri dari System")
-        st.warning("⚠️ Perhatian: Menghapus santri akan mengosongkan barisnya di rekap utama dan menghapus sheet riwayatnya.")
-        
+        st.subheader("❌ Hapus Data Santri")
         target_hapus = st.selectbox("Pilih Santri yang Akan Dihapus:", df_santri['Nama Santri'].unique())
         
         if st.button("🗑️ Hapus Santri Ini", type="primary"):
