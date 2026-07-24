@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import re
 from google.oauth2.service_account import Credentials
 import gspread
 
@@ -28,6 +29,16 @@ def init_connection():
 gc = init_connection()
 sh = gc.open_by_key("1RAIbKcuC1z1X_IYYS0yZzjdUp-qKL6uiEpO34INsW9g")
 
+# --- HELPER CLEANER ANGKA (KEBAL ERROR) ---
+def clean_number(value):
+    """Membersihkan segala jenis karakter bukan angka (Rp, spasi, titik, koma)"""
+    if not value:
+        return 0.0
+    val_str = str(value)
+    # Ambil hanya digit angka
+    cleaned = re.sub(r'[^\d]', '', val_str)
+    return float(cleaned) if cleaned else 0.0
+
 # --- HELPER FUNCTIONS ---
 def load_data():
     ws_rekap = sh.worksheet("Lembar2")
@@ -44,23 +55,16 @@ def load_data():
             lp = r[3] if len(r) > 3 else ""
             kelas = r[4] if len(r) > 4 else ""
             
-            # FIT SESUAI STRUKTUR BARU LO:
+            # STRUKTUR F, G, H, I:
             # Col F (idx 5) = Jajan | Col G (idx 6) = Uang Masuk | Col H (idx 7) = Uang Keluar | Col I (idx 8) = Saldo
-            jatah = r[5] if len(r) > 5 else "0"
-            masuk = r[6] if len(r) > 6 else "0"
-            keluar = r[7] if len(r) > 7 else "0"
-            saldo = r[8] if len(r) > 8 else "0"
+            jatah = clean_number(r[5]) if len(r) > 5 else 0.0
+            masuk = clean_number(r[6]) if len(r) > 6 else 0.0
+            keluar = clean_number(r[7]) if len(r) > 7 else 0.0
+            saldo = clean_number(r[8]) if len(r) > 8 else 0.0
             
             parsed_data.append([no, nama, lp, kelas, jatah, masuk, keluar, saldo])
             
     df = pd.DataFrame(parsed_data, columns=['No', 'Nama Santri', 'L/P', 'Kelas', 'Jatah Jajan', 'Uang Masuk', 'Uang Keluar', 'Sisa Saldo'])
-    
-    for col in ['Jatah Jajan', 'Uang Masuk', 'Uang Keluar', 'Sisa Saldo']:
-        df[col] = pd.to_numeric(
-            df[col].astype(str).str.replace('.', '').str.replace(',', '').str.replace('Rp', '').str.strip(), 
-            errors='coerce'
-        ).fillna(0)
-        
     return df
 
 def tambah_santri_baru(nama, lp, kelas, jatah_jajan):
@@ -108,8 +112,8 @@ def catat_transaksi(no_santri, jenis, nominal, tanggal, keterangan):
     row_idx = cell.row
     
     # Col G (idx 7 di cell sheet) = Masuk | Col H (idx 8 di cell sheet) = Keluar
-    val_masuk = float(str(ws_rekap.cell(row_idx, 7).value or 0).replace('.', '').replace(',', ''))
-    val_keluar = float(str(ws_rekap.cell(row_idx, 8).value or 0).replace('.', '').replace(',', ''))
+    val_masuk = clean_number(ws_rekap.cell(row_idx, 7).value)
+    val_keluar = clean_number(ws_rekap.cell(row_idx, 8).value)
     
     if "Masuk" in jenis:
         new_masuk = val_masuk + nominal
@@ -118,8 +122,9 @@ def catat_transaksi(no_santri, jenis, nominal, tanggal, keterangan):
         new_keluar = val_keluar + nominal
         ws_rekap.update_cell(row_idx, 8, new_keluar)
         
-    current_masuk = float(str(ws_rekap.cell(row_idx, 7).value or 0).replace('.', '').replace(',', ''))
-    current_keluar = float(str(ws_rekap.cell(row_idx, 8).value or 0).replace('.', '').replace(',', ''))
+    current_masuk = clean_number(ws_rekap.cell(row_idx, 7).value)
+    current_keluar = clean_number(ws_rekap.cell(row_idx, 8).value)
+    
     # Col I (idx 9 di cell sheet) = Saldo
     ws_rekap.update_cell(row_idx, 9, current_masuk - current_keluar)
 
