@@ -166,7 +166,7 @@ def hapus_santri(nama_target):
 
 # --- HEADER APP ---
 st.title("💰 System Keuangan Jajan Santri")
-st.caption("Pondok Pesantren Miftahul Huda IV - Cloud Access")
+st.caption("Pondok Pesantren Nurul Hidayah Al-I'tishom - Cloud Access")
 
 # TAMPILKAN POPUP NOTIFIKASI
 if "msg_success" in st.session_state:
